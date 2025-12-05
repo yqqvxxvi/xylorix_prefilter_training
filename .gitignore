@@ -38,7 +38,6 @@ ENV/
 
 # Data
 dataset/
-data/
 *.csv
 *.pkl
 *.pte
