@@ -4,7 +4,7 @@ A machine learning and deep learning framework for wood microscopy image classif
 - **Wood vs Non-Wood**: Classify microscopy images as wood or non-wood
 - **Usability**: Classify wood images as usable or unusable
 
-## Recent Updates
+## Recent Updates (05/12/2025)
 
 - **Augmentation Stacking**: New feature to multiply dataset size by creating multiple augmented versions per image
 - **Mirrored Edge Rotation**: Rotation augmentation now uses mirrored edges instead of black borders for more natural-looking augmented images
