@@ -54,16 +54,32 @@ def load_model(model_type, model_path, device='cpu', use_texture=False, vol_thre
 
     elif model_type == 'cnn':
         checkpoint = torch.load(model_path, map_location=device)
+        state_dict = checkpoint['model_state_dict']
+
+        # Auto-detect num_classes from checkpoint
+        # For EfficientNet: check 'model.classifier.1.weight'
+        # For ResNet: check 'fc.weight'
+        num_classes = None
+        if 'model.classifier.1.weight' in state_dict:
+            num_classes = state_dict['model.classifier.1.weight'].shape[0]
+        elif 'fc.weight' in state_dict:
+            num_classes = state_dict['fc.weight'].shape[0]
+
+        if num_classes is None:
+            print("  Warning: Could not detect num_classes, using default=1")
+            num_classes = 1
+
+        print(f"  Detected num_classes: {num_classes}")
 
         # Determine architecture from checkpoint or use specified architecture
-        if 'model.features' in str(checkpoint['model_state_dict'].keys()):
+        if 'model.features' in str(state_dict.keys()):
             # EfficientNet architecture
-            model = EfficientNetClassifier(num_classes=2, model_name=cnn_arch, pretrained=False)
+            model = EfficientNetClassifier(num_classes=num_classes, model_name=cnn_arch, pretrained=False)
         else:
             # ResNet architecture
-            model = ResNet18(num_classes=2)
+            model = ResNet18(num_classes=num_classes)
 
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(state_dict)
         model = model.to(device)
         model.eval()
         return model, None, get_test_transforms()
@@ -125,8 +141,16 @@ def predict_with_features(image_path, model, feature_extractor, model_type, skip
         }
 
 
-def predict_with_cnn(image_path, model, transform, device):
-    """Predict using CNN model"""
+def predict_with_cnn(image_path, model, transform, device, threshold=0.5):
+    """Predict using CNN model
+
+    Args:
+        image_path: Path to image
+        model: CNN model
+        transform: Image transform
+        device: Device to use
+        threshold: Classification threshold (default: 0.5)
+    """
     try:
         # Load image
         image = cv2.imread(str(image_path))
@@ -141,15 +165,25 @@ def predict_with_cnn(image_path, model, transform, device):
 
         with torch.no_grad():
             outputs = model(image_tensor)
-            probs = torch.softmax(outputs, dim=1).cpu().numpy()[0]
 
-        pred = np.argmax(probs)
+            # Handle different output formats
+            if outputs.shape[-1] == 1:
+                # Single output: binary classification with sigmoid
+                prob_usable = torch.sigmoid(outputs).squeeze().cpu().item()
+                pred = 1 if prob_usable >= threshold else 0
+            else:
+                # Two outputs: binary classification with softmax
+                probs = torch.softmax(outputs, dim=1).cpu().numpy()[0]
+                prob_usable = probs[1]
+                pred = np.argmax(probs)
+
         label = 'usable' if pred == 1 else 'unusable'
+        confidence = prob_usable if pred == 1 else (1 - prob_usable)
 
         return {
             'prediction': label,
-            'confidence': probs[pred],
-            'usable_probability': probs[1],
+            'confidence': confidence,
+            'usable_probability': prob_usable,
             'vol_score': None,
             'is_clear': True
         }
@@ -205,8 +239,10 @@ def main():
     # Options
     parser.add_argument('--copy-files', action='store_true',
                        help='Copy images to output subdirectories (usable/, unusable/, error/)')
+    parser.add_argument('--threshold', type=float, default=0.5,
+                       help='Classification threshold for binary prediction (default: 0.5)')
     parser.add_argument('--confidence-threshold', type=float, default=0.0,
-                       help='Minimum confidence threshold (default: 0.0, no filtering)')
+                       help='Minimum confidence threshold for reporting (default: 0.0, no filtering)')
 
     args = parser.parse_args()
 
@@ -238,6 +274,7 @@ def main():
     print(f"Input: {input_dir}")
     print(f"Output: {output_dir}")
     print(f"Device: {device}")
+    print(f"Classification threshold: {args.threshold}")
     print(f"Skip VoL check: {args.skip_vol_check}")
     print("=" * 80)
 
@@ -272,7 +309,7 @@ def main():
         if args.model_type in ['rf', 'mlp']:
             result = predict_with_features(img_path, model, feature_extractor, args.model_type, args.skip_vol_check)
         else:
-            result = predict_with_cnn(img_path, model, transform, device)
+            result = predict_with_cnn(img_path, model, transform, device, threshold=args.threshold)
 
         result['filename'] = img_path.name
         result['filepath'] = str(img_path)
@@ -306,6 +343,14 @@ def main():
     if args.confidence_threshold > 0:
         high_conf = df[df['confidence'] >= args.confidence_threshold]
         print(f"\nHigh confidence (>= {args.confidence_threshold}): {len(high_conf)} ({len(high_conf)/len(df)*100:.1f}%)")
+
+        # Breakdown by class
+        for pred_class in ['usable', 'unusable']:
+            if pred_class in df['prediction'].values:
+                class_df = df[df['prediction'] == pred_class]
+                high_conf_class = class_df[class_df['confidence'] >= args.confidence_threshold]
+                if len(class_df) > 0:
+                    print(f"  - {pred_class}: {len(high_conf_class)} ({len(high_conf_class)/len(class_df)*100:.1f}% of {pred_class} predictions)")
 
     print(f"\nResults saved to: {csv_path}")
     if args.copy_files:

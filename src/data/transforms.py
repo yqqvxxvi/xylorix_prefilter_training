@@ -133,3 +133,16 @@ def get_test_transforms(image_size: int = 224):
         Transform function
     """
     return get_val_transforms(image_size)
+
+
+def get_inference_transforms(image_size: int = 224):
+    """
+    Get inference transforms (same as validation/test)
+
+    Args:
+        image_size: Target image size
+
+    Returns:
+        Transform function
+    """
+    return get_val_transforms(image_size)

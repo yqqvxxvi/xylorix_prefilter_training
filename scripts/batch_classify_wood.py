@@ -54,8 +54,21 @@ def load_model(model_type, model_path, device='cpu', use_texture=False, vol_thre
 
     elif model_type == 'cnn':
         checkpoint = torch.load(model_path, map_location=device)
-        model = ResNet18(num_classes=2)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        state_dict = checkpoint['model_state_dict']
+
+        # Auto-detect num_classes from checkpoint
+        num_classes = None
+        if 'fc.weight' in state_dict:
+            num_classes = state_dict['fc.weight'].shape[0]
+
+        if num_classes is None:
+            print("  Warning: Could not detect num_classes, using default=1")
+            num_classes = 1
+
+        print(f"  Detected num_classes: {num_classes}")
+
+        model = ResNet18(num_classes=num_classes)
+        model.load_state_dict(state_dict)
         model = model.to(device)
         model.eval()
         return model, None, get_test_transforms()
@@ -116,8 +129,16 @@ def predict_with_features(image_path, model, feature_extractor, model_type):
         }
 
 
-def predict_with_cnn(image_path, model, transform, device):
-    """Predict using CNN model"""
+def predict_with_cnn(image_path, model, transform, device, threshold=0.5):
+    """Predict using CNN model
+
+    Args:
+        image_path: Path to image
+        model: CNN model
+        transform: Image transform
+        device: Device to use
+        threshold: Classification threshold (default: 0.5)
+    """
     try:
         # Load image
         image = cv2.imread(str(image_path))
@@ -132,15 +153,25 @@ def predict_with_cnn(image_path, model, transform, device):
 
         with torch.no_grad():
             outputs = model(image_tensor)
-            probs = torch.softmax(outputs, dim=1).cpu().numpy()[0]
 
-        pred = np.argmax(probs)
+            # Handle different output formats
+            if outputs.shape[-1] == 1:
+                # Single output: binary classification with sigmoid
+                prob_wood = torch.sigmoid(outputs).squeeze().cpu().item()
+                pred = 1 if prob_wood >= threshold else 0
+            else:
+                # Two outputs: binary classification with softmax
+                probs = torch.softmax(outputs, dim=1).cpu().numpy()[0]
+                prob_wood = probs[1]
+                pred = np.argmax(probs)
+
         label = 'wood' if pred == 1 else 'non_wood'
+        confidence = prob_wood if pred == 1 else (1 - prob_wood)
 
         return {
             'prediction': label,
-            'confidence': probs[pred],
-            'wood_probability': probs[1],
+            'confidence': confidence,
+            'wood_probability': prob_wood,
             'vol_score': None,
             'is_clear': True
         }
@@ -189,8 +220,10 @@ def main():
     # Options
     parser.add_argument('--copy-files', action='store_true',
                        help='Copy images to output subdirectories (wood/, non_wood/, blurry/, error/)')
+    parser.add_argument('--threshold', type=float, default=0.5,
+                       help='Classification threshold for binary prediction (default: 0.5)')
     parser.add_argument('--confidence-threshold', type=float, default=0.0,
-                       help='Minimum confidence threshold (default: 0.0, no filtering)')
+                       help='Minimum confidence threshold for reporting (default: 0.0, no filtering)')
 
     args = parser.parse_args()
 
@@ -222,6 +255,7 @@ def main():
     print(f"Input: {input_dir}")
     print(f"Output: {output_dir}")
     print(f"Device: {device}")
+    print(f"Classification threshold: {args.threshold}")
     print("=" * 80)
 
     # Load model
@@ -256,7 +290,7 @@ def main():
         if args.model_type in ['rf', 'mlp']:
             result = predict_with_features(img_path, model, feature_extractor, args.model_type)
         else:
-            result = predict_with_cnn(img_path, model, transform, device)
+            result = predict_with_cnn(img_path, model, transform, device, threshold=args.threshold)
 
         result['filename'] = img_path.name
         result['filepath'] = str(img_path)

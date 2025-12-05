@@ -66,12 +66,15 @@ class CNNTrainer:
             outputs = self.model(images)
 
             # Handle different output formats
-            if outputs.dim() == 1:
-                # Binary classification with single output
+            if outputs.shape[-1] == 1:
+                # Binary classification with single output (BCEWithLogitsLoss)
+                # Criterion expects logits, so we pass raw outputs
+                outputs = outputs.squeeze()  # (batch_size, 1) -> (batch_size,)
                 loss = self.criterion(outputs, labels.float())
-                preds = (outputs > 0.5).long()
+                # For predictions, apply sigmoid to get probabilities
+                preds = (torch.sigmoid(outputs) > 0.5).long()
             else:
-                # Multi-class or binary with 2 outputs
+                # Multi-class or binary with 2 outputs (CrossEntropyLoss)
                 loss = self.criterion(outputs, labels)
                 preds = outputs.argmax(dim=1)
 
@@ -108,11 +111,15 @@ class CNNTrainer:
                 outputs = self.model(images)
 
                 # Handle different output formats
-                if outputs.dim() == 1:
+                if outputs.shape[-1] == 1:
+                    # Binary classification with single output (BCEWithLogitsLoss)
+                    outputs = outputs.squeeze()  # (batch_size, 1) -> (batch_size,)
                     loss = self.criterion(outputs, labels.float())
-                    preds = (outputs > 0.5).long()
-                    probs = outputs
+                    # Apply sigmoid to get probabilities
+                    probs = torch.sigmoid(outputs)
+                    preds = (probs > 0.5).long()
                 else:
+                    # Multi-class or binary with 2 outputs (CrossEntropyLoss)
                     loss = self.criterion(outputs, labels)
                     preds = outputs.argmax(dim=1)
                     probs = torch.softmax(outputs, dim=1)[:, 1]

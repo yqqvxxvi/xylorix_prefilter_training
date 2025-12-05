@@ -63,3 +63,9 @@ Thumbs.db
 *.tmp
 *.log
 *.cache
+
+# Nonsense
+tests/
+results/
+docs/
+examples/

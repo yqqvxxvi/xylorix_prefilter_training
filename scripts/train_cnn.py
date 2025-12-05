@@ -146,21 +146,26 @@ def main():
         include_original=args.include_original
     )
 
-    # Create model
+    # Create model with single output for binary classification
     print(f"\nCreating model: {args.model}")
     if 'resnet' in args.model:
-        model = ResNet18(num_classes=2, pretrained=args.pretrained)
+        model = ResNet18(num_classes=1, pretrained=args.pretrained)
     else:  # EfficientNet
         model = create_efficientnet_model(
-            num_classes=2,
+            num_classes=1,
             model_name=args.model,
             pretrained=args.pretrained
         )
 
     model = model.to(device)
 
-    # Loss and optimizer
-    criterion = nn.CrossEntropyLoss()
+    print(f"Model architecture: Binary classification with single output neuron")
+    print(f"  Output: Single value [0, 1] after sigmoid")
+    print(f"  Threshold: 0.5 (< 0.5 = {args.class_names[0]}, >= 0.5 = {args.class_names[1]})")
+
+    # Loss and optimizer - Use BCEWithLogitsLoss for binary classification
+    # BCEWithLogitsLoss combines sigmoid + BCE for numerical stability
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(
         model.parameters(),
         lr=args.lr,

@@ -4,12 +4,30 @@ A machine learning and deep learning framework for wood microscopy image classif
 - **Wood vs Non-Wood**: Classify microscopy images as wood or non-wood
 - **Usability**: Classify wood images as usable or unusable
 
-## Recent Updates (05/12/2025)
+## Recent Updates (December 2025)
 
-- **Augmentation Stacking**: New feature to multiply dataset size by creating multiple augmented versions per image
-- **Mirrored Edge Rotation**: Rotation augmentation now uses mirrored edges instead of black borders for more natural-looking augmented images
-- **Improved API**: Parameter names changed from `wood_dir`/`non_wood_dir` to `positive_dir`/`negative_dir` for better generalization
-- **Enhanced Data Pipeline**: More flexible dataset creation with `AugmentedWoodDataset` wrapper class
+### Binary Classification Refactor
+- **Clean Binary Classification**: All models now use single output neuron (num_classes=1) with sigmoid activation
+- **BCEWithLogitsLoss**: Proper binary classification loss for more stable training
+- **Adjustable Thresholds**: Classification threshold can be adjusted without retraining (default: 0.5)
+- **Auto-Detection**: Scripts automatically detect model architecture from checkpoints
+- **Backward Compatible**: Works with both old (2-output) and new (1-output) models
+
+### ROC Curve Generation
+- **Comprehensive ROC Analysis**: Generate ROC curves from two class directories
+- **Automatic Batch Processing**: Efficiently processes large datasets
+- **Optimal Threshold Detection**: Finds best threshold using Youden's index
+- **Threshold Visualization**: Optionally annotate specific threshold points on curves
+
+### Improved Batch Processing
+- **Enhanced Confidence Reporting**: Breakdown by class showing high confidence predictions per category
+- **Flexible Thresholds**: Separate classification and confidence thresholds
+- **Better Statistics**: Clear reporting of prediction distributions
+
+### Previous Updates
+- **Augmentation Stacking**: Multiply dataset size by creating multiple augmented versions per image
+- **Mirrored Edge Rotation**: Rotation augmentation uses mirrored edges instead of black borders
+- **Improved API**: Parameter names changed to `positive_dir`/`negative_dir` for better generalization
 
 ## Table of Contents
 
@@ -20,13 +38,37 @@ A machine learning and deep learning framework for wood microscopy image classif
 - [Training](#training)
   - [CNN Training](#1-cnn-training)
   - [Machine Learning on Features](#2-machine-learning-on-features)
+- [Evaluation](#evaluation)
+  - [ROC Curve Generation](#roc-curve-generation)
+- [Batch Processing](#batch-processing)
+  - [Batch Wood Classification](#batch-wood-classification)
+  - [Batch Usability Classification](#batch-usability-classification)
 - [Inference](#inference)
+- [Binary Classification Guide](#binary-classification-guide)
 - [Configuration](#configuration)
 - [Model Architectures](#model-architectures)
 
 ---
 
 ## Features
+
+- **Clean Binary Classification**:
+  - Single output neuron with sigmoid activation
+  - Adjustable classification threshold (default: 0.5)
+  - BCEWithLogitsLoss for stable training
+  - Backward compatible with old models
+
+- **ROC Curve Analysis**:
+  - Generate comprehensive ROC curves
+  - Automatic optimal threshold detection
+  - Batch processing from directories
+  - Beautiful publication-ready plots
+
+- **Enhanced Batch Processing**:
+  - Threshold-based classification
+  - Detailed confidence reporting by class
+  - Automatic file organization
+  - Support for CNN, Random Forest, and MLP
 
 - **Multiple Model Architectures**:
   - Deep Learning: ResNet18, EfficientNet (B0-B3)
@@ -418,6 +460,189 @@ python scripts/train_blob_ml.py \
 
 ---
 
+## Evaluation
+
+### ROC Curve Generation
+
+Generate comprehensive ROC curves to evaluate model performance and find optimal classification thresholds.
+
+#### Basic Usage
+
+```bash
+python scripts/evaluate_roc.py \
+  --model_path models/best_model.pt \
+  --positive_dir data/test/wood \
+  --negative_dir data/test/non_wood \
+  --model_type efficientnet \
+  --output_path results/roc_curve.png
+```
+
+#### Arguments
+
+| Argument | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `--model_path` | str | Yes | - | Path to trained model checkpoint |
+| `--positive_dir` | str | Yes | - | Directory with positive class images |
+| `--negative_dir` | str | Yes | - | Directory with negative class images |
+| `--model_type` | str | No | `resnet18` | Model architecture (`resnet18`, `efficientnet`) |
+| `--output_path` | str | No | `results/roc_curve.png` | Path to save ROC curve plot |
+| `--batch_size` | int | No | 32 | Batch size for processing |
+| `--device` | str | No | Auto | Device (`cuda`, `cpu`) |
+| `--image_size` | int | No | 224 | Input image size |
+| `--class_names` | str[] | No | `['Non-Wood', 'Wood']` | Class names for legend |
+| `--plot_thresholds` | flag | No | - | Annotate threshold values on plot |
+| `--threshold_step` | int | No | 10 | Step for threshold annotations |
+| `--show` | flag | No | - | Display plot after generation |
+
+#### Features
+
+- **Automatic Batch Processing**: Efficiently processes all images from directories
+- **Auto-Detection**: Detects model architecture (1-output vs 2-output) automatically
+- **Optimal Threshold**: Finds best threshold using Youden's index (maximizes TPR - FPR)
+- **Comprehensive Metrics**: Returns AUC, TPR, FPR, and all threshold points
+- **Beautiful Plots**: Publication-ready visualizations with optional threshold annotations
+
+#### Output
+
+The script provides:
+- **ROC Curve Plot**: Visual representation with AUC score
+- **Optimal Threshold**: Best classification threshold
+- **Performance Metrics**: TPR and FPR at optimal threshold
+- **Raw Data**: All threshold values and corresponding TPR/FPR rates
+
+#### Example Output
+
+```
+AUC: 0.9543
+Optimal Threshold: 0.4823
+  - True Positive Rate: 0.9123
+  - False Positive Rate: 0.0456
+```
+
+#### Use Cases
+
+1. **Find Optimal Threshold**: Use the optimal threshold for batch classification
+2. **Model Comparison**: Compare multiple models by AUC scores
+3. **Performance Analysis**: Understand trade-offs between TPR and FPR
+4. **Threshold Selection**: Choose threshold based on your precision/recall requirements
+
+---
+
+## Batch Processing
+
+Process large numbers of images efficiently with automatic classification and organization.
+
+### Batch Wood Classification
+
+Classify images as wood or non-wood with confidence reporting.
+
+#### Basic Usage
+
+```bash
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/wood_model.pt \
+  --input-dir data/images/ \
+  --output-dir results/
+```
+
+#### Key Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--model-type` | str | Required | Model type (`rf`, `mlp`, `cnn`) |
+| `--model` | str | Required | Path to model file |
+| `--input-dir` | str | Required | Input directory with images |
+| `--output-dir` | str | Required | Output directory for results |
+| `--threshold` | float | 0.5 | **Classification threshold** |
+| `--confidence-threshold` | float | 0.0 | Minimum confidence for reporting |
+| `--copy-files` | flag | - | Copy images to subdirectories |
+
+#### New Threshold Feature
+
+The `--threshold` parameter controls when an image is classified as positive:
+
+```bash
+# Default threshold (0.5) - balanced
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/wood_model.pt \
+  --input-dir data/test/ \
+  --output-dir results/ \
+  --threshold 0.5
+
+# Lower threshold (0.3) - more wood detections (higher recall)
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/wood_model.pt \
+  --input-dir data/test/ \
+  --output-dir results/ \
+  --threshold 0.3
+
+# Higher threshold (0.7) - fewer wood detections (higher precision)
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/wood_model.pt \
+  --input-dir data/test/ \
+  --output-dir results/ \
+  --threshold 0.7
+```
+
+**Use optimal threshold from ROC curve:**
+```bash
+# First, find optimal threshold
+python scripts/evaluate_roc.py \
+  --model_path models/wood_model.pt \
+  --positive_dir data/test/wood \
+  --negative_dir data/test/non_wood \
+  --output_path results/roc.png
+
+# Output: Optimal Threshold: 0.4823
+
+# Then use it for batch processing
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/wood_model.pt \
+  --input-dir data/production/ \
+  --output-dir results/ \
+  --threshold 0.4823  # Use optimal threshold!
+```
+
+#### Enhanced Confidence Reporting
+
+The script now provides detailed confidence breakdown:
+
+```
+RESULTS SUMMARY
+================================================================================
+Total images: 100
+
+Prediction counts:
+non_wood    60
+wood        40
+
+High confidence (>= 0.7): 85 (85.0%)
+  - wood: 35 (87.5% of wood predictions)
+  - non_wood: 50 (83.3% of non_wood predictions)
+```
+
+### Batch Usability Classification
+
+Same features as wood classification, optimized for usability task:
+
+```bash
+python scripts/batch_classify_usability.py \
+  --model-type cnn \
+  --model models/usability_model.pt \
+  --input-dir data/wood_images/ \
+  --output-dir results/ \
+  --threshold 0.5 \
+  --confidence-threshold 0.6 \
+  --copy-files
+```
+
+---
+
 ## Inference
 
 Run predictions on single images or batches using `scripts/predict.py`.
@@ -474,6 +699,103 @@ python scripts/predict.py \
   --image sample.jpg \
   --use-texture
 ```
+
+---
+
+## Binary Classification Guide
+
+### Understanding the New Architecture
+
+All CNN models now use **proper binary classification** with a single output neuron:
+
+**Old Approach (num_classes=2):**
+- Model outputs two values → softmax → argmax
+- Threshold fixed at 0.5
+- Cannot adjust without retraining
+
+**New Approach (num_classes=1):**
+- Model outputs single value → sigmoid → threshold-based decision
+- Threshold adjustable (default: 0.5)
+- Can optimize threshold without retraining
+
+### How It Works
+
+```python
+# Model forward pass
+output = model(image)  # Single raw logit value
+
+# Apply sigmoid to get probability
+probability = sigmoid(output)  # Value between 0 and 1
+
+# Threshold-based prediction
+if probability >= threshold:  # Default threshold = 0.5
+    prediction = "positive"  # e.g., wood, usable
+else:
+    prediction = "negative"  # e.g., non-wood, unusable
+
+# Confidence
+confidence = probability if prediction == "positive" else (1 - probability)
+```
+
+### Training Details
+
+- **Loss Function**: `BCEWithLogitsLoss` (combines sigmoid + BCE for stability)
+- **Output**: Single neuron with no activation (raw logits)
+- **Inference**: Apply sigmoid to get probabilities
+
+### Backward Compatibility
+
+All scripts automatically detect model architecture:
+- **New models** (1 output): Use sigmoid
+- **Old models** (2 outputs): Use softmax
+
+Works seamlessly with both!
+
+### Choosing the Right Threshold
+
+1. **Use Default (0.5)**: Good starting point, balanced predictions
+2. **Use ROC Curve**: Find optimal threshold for your data
+3. **Adjust for Task**:
+   - **High Recall needed**: Lower threshold (0.3-0.4)
+   - **High Precision needed**: Higher threshold (0.6-0.7)
+
+### Complete Workflow Example
+
+```bash
+# 1. Train a model (automatically uses num_classes=1)
+python scripts/train_cnn.py \
+  --task wood \
+  --model efficientnet_b0 \
+  --positive-dir data/wood/ \
+  --negative-dir data/non_wood/
+
+# 2. Evaluate and find optimal threshold
+python scripts/evaluate_roc.py \
+  --model_path models/cnn/wood_*/best_model.pt \
+  --positive_dir data/test/wood \
+  --negative_dir data/test/non_wood \
+  --model_type efficientnet
+
+# Output: Optimal Threshold: 0.4823, AUC: 0.9543
+
+# 3. Batch classify with optimal threshold
+python scripts/batch_classify_wood.py \
+  --model-type cnn \
+  --model models/cnn/wood_*/best_model.pt \
+  --input-dir data/production/ \
+  --output-dir results/ \
+  --threshold 0.4823  # Use optimal threshold from step 2
+```
+
+### Key Benefits
+
+✅ **Adjustable Threshold**: Change without retraining
+✅ **Cleaner Code**: Standard binary classification pattern
+✅ **Better Performance**: More stable training with BCEWithLogitsLoss
+✅ **Flexible Deployment**: Optimize threshold for different use cases
+✅ **Backward Compatible**: Works with old models too
+
+For detailed technical information, see `docs/BINARY_CLASSIFICATION_CHANGES.md`.
 
 ---
 
