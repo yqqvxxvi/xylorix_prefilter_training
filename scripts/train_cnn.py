@@ -69,6 +69,8 @@ def main():
     # Data augmentation
     parser.add_argument('--image-size', type=int, default=224,
                        help='Image size (default: 224)')
+    parser.add_argument('--grayscale', action='store_true',
+                       help='Train on grayscale images (1 channel instead of 3)')
     parser.add_argument('--balanced-sampler', action='store_true',
                        help='Use weighted sampler for class imbalance')
     parser.add_argument('--stack-augmentations', action='store_true',
@@ -123,6 +125,7 @@ def main():
     print(f"Task: {args.task.upper()}")
     print(f"Model: {args.model.upper()}")
     print(f"Device: {device}")
+    print(f"Image mode: {'Grayscale (1 channel)' if args.grayscale else 'RGB (3 channels)'}")
     print(f"Classes: {args.class_names[0]} (0) vs {args.class_names[1]} (1)")
     print(f"Output: {args.output_dir}")
     print(f"Logs: {args.log_dir}")
@@ -143,18 +146,21 @@ def main():
         use_balanced_sampler=args.balanced_sampler,
         stack_augmentations=args.stack_augmentations,
         num_augmentations=args.num_augmentations,
-        include_original=args.include_original
+        include_original=args.include_original,
+        grayscale=args.grayscale
     )
 
     # Create model with single output for binary classification
+    in_channels = 1 if args.grayscale else 3
     print(f"\nCreating model: {args.model}")
     if 'resnet' in args.model:
-        model = ResNet18(num_classes=1, pretrained=args.pretrained)
+        model = ResNet18(num_classes=1, pretrained=args.pretrained, in_channels=in_channels)
     else:  # EfficientNet
         model = create_efficientnet_model(
             num_classes=1,
             model_name=args.model,
-            pretrained=args.pretrained
+            pretrained=args.pretrained,
+            in_channels=in_channels
         )
 
     model = model.to(device)

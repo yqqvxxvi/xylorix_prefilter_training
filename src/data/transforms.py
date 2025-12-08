@@ -80,69 +80,95 @@ class RandomRotationReflect:
         return Image.fromarray(rotated)
 
 
-def get_train_transforms(image_size: int = 224):
+def get_train_transforms(image_size: int = 224, grayscale: bool = False):
     """
     Get training transforms with data augmentation
 
     Args:
         image_size: Target image size
+        grayscale: If True, use grayscale (1 channel) transforms
 
     Returns:
         Transform function
     """
-    return transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((image_size, image_size)),
-        transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomVerticalFlip(p=0.5),
-        RandomRotationReflect(degrees=180),  # Rotation with mirrored edges
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                           std=[0.229, 0.224, 0.225])
-    ])
+    if grayscale:
+        return transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5),
+            RandomRotationReflect(degrees=180),  # Rotation with mirrored edges
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),  # No saturation for grayscale
+            transforms.Grayscale(num_output_channels=1),  # Ensure 1 channel
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5], std=[0.5])  # Single channel normalization
+        ])
+    else:
+        return transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomVerticalFlip(p=0.5),
+            RandomRotationReflect(degrees=180),  # Rotation with mirrored edges
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                               std=[0.229, 0.224, 0.225])
+        ])
 
 
-def get_val_transforms(image_size: int = 224):
+def get_val_transforms(image_size: int = 224, grayscale: bool = False):
     """
     Get validation transforms (no augmentation)
 
     Args:
         image_size: Target image size
+        grayscale: If True, use grayscale (1 channel) transforms
 
     Returns:
         Transform function
     """
-    return transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.Resize((image_size, image_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                           std=[0.229, 0.224, 0.225])
-    ])
+    if grayscale:
+        return transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((image_size, image_size)),
+            transforms.Grayscale(num_output_channels=1),  # Ensure 1 channel
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5], std=[0.5])  # Single channel normalization
+        ])
+    else:
+        return transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                               std=[0.229, 0.224, 0.225])
+        ])
 
 
-def get_test_transforms(image_size: int = 224):
+def get_test_transforms(image_size: int = 224, grayscale: bool = False):
     """
     Get test transforms (same as validation)
 
     Args:
         image_size: Target image size
+        grayscale: If True, use grayscale (1 channel) transforms
 
     Returns:
         Transform function
     """
-    return get_val_transforms(image_size)
+    return get_val_transforms(image_size, grayscale=grayscale)
 
 
-def get_inference_transforms(image_size: int = 224):
+def get_inference_transforms(image_size: int = 224, grayscale: bool = False):
     """
     Get inference transforms (same as validation/test)
 
     Args:
         image_size: Target image size
+        grayscale: If True, use grayscale (1 channel) transforms
 
     Returns:
         Transform function
     """
-    return get_val_transforms(image_size)
+    return get_val_transforms(image_size, grayscale=grayscale)

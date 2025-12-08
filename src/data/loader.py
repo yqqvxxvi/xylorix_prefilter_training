@@ -23,7 +23,8 @@ def get_data_loaders(
     random_seed: int = 42,
     stack_augmentations: bool = False,
     num_augmentations: int = 2,
-    include_original: bool = True
+    include_original: bool = True,
+    grayscale: bool = False
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Create train and validation data loaders
@@ -40,6 +41,7 @@ def get_data_loaders(
         stack_augmentations: If True, stack augmented images on top of originals
         num_augmentations: Number of augmented versions per image (if stacking)
         include_original: Include original non-augmented images (if stacking)
+        grayscale: If True, load images as grayscale (1 channel)
 
     Returns:
         Tuple of (train_loader, val_loader)
@@ -54,14 +56,16 @@ def get_data_loaders(
         base_dataset = WoodImageDataset.from_directories(
             positive_dir=positive_dir,
             negative_dir=negative_dir,
-            transform=get_val_transforms(image_size)
+            transform=get_val_transforms(image_size, grayscale=grayscale),
+            grayscale=grayscale
         )
     else:
         # Use training transforms directly
         base_dataset = WoodImageDataset.from_directories(
             positive_dir=positive_dir,
             negative_dir=negative_dir,
-            transform=get_train_transforms(image_size)
+            transform=get_train_transforms(image_size, grayscale=grayscale),
+            grayscale=grayscale
         )
 
     # Split into train and validation
@@ -81,15 +85,17 @@ def get_data_loaders(
         train_base = WoodImageDataset(
             image_paths=[base_dataset.image_paths[i] for i in train_dataset.indices],
             labels=[base_dataset.labels[i] for i in train_dataset.indices],
-            transform=get_val_transforms(image_size)
+            transform=get_val_transforms(image_size, grayscale=grayscale),
+            grayscale=grayscale
         )
 
         # Wrap with augmented dataset
         train_dataset = AugmentedWoodDataset(
             base_dataset=train_base,
-            augmentation_transform=get_train_transforms(image_size),
+            augmentation_transform=get_train_transforms(image_size, grayscale=grayscale),
             num_augmentations=num_augmentations,
-            include_original=include_original
+            include_original=include_original,
+            grayscale=grayscale
         )
 
         multiplier = (1 if include_original else 0) + num_augmentations
@@ -98,7 +104,7 @@ def get_data_loaders(
 
     # Ensure validation uses val transforms
     if not stack_augmentations:
-        val_dataset.dataset.transform = get_val_transforms(image_size)
+        val_dataset.dataset.transform = get_val_transforms(image_size, grayscale=grayscale)
 
     # Create sampler for class imbalance (optional)
     sampler = None
@@ -159,7 +165,8 @@ def get_test_loader(
     negative_dir: Optional[Path] = None,
     batch_size: int = 64,
     image_size: int = 224,
-    num_workers: int = 4
+    num_workers: int = 4,
+    grayscale: bool = False
 ) -> DataLoader:
     """
     Create test data loader
@@ -171,6 +178,7 @@ def get_test_loader(
         batch_size: Batch size
         image_size: Image resize dimension
         num_workers: Number of data loading workers
+        grayscale: If True, load images as grayscale (1 channel)
 
     Returns:
         Test data loader
@@ -186,7 +194,8 @@ def get_test_loader(
     test_dataset = WoodImageDataset.from_directories(
         positive_dir=positive_test,
         negative_dir=negative_test,
-        transform=get_val_transforms(image_size)
+        transform=get_val_transforms(image_size, grayscale=grayscale),
+        grayscale=grayscale
     )
 
     test_loader = DataLoader(

@@ -23,16 +23,19 @@ class WoodImageDataset(Dataset):
     def __init__(self,
                  image_paths: List[Path],
                  labels: List[int],
-                 transform: Optional[Callable] = None):
+                 transform: Optional[Callable] = None,
+                 grayscale: bool = False):
         """
         Args:
             image_paths: List of image file paths
             labels: List of labels (0 = non-wood, 1 = wood)
             transform: Optional transform to apply
+            grayscale: If True, load images as grayscale (1 channel)
         """
         self.image_paths = image_paths
         self.labels = labels
         self.transform = transform
+        self.grayscale = grayscale
 
         assert len(self.image_paths) == len(self.labels), \
             "Number of images and labels must match"
@@ -55,8 +58,14 @@ class WoodImageDataset(Dataset):
         if image is None:
             raise ValueError(f"Failed to load image: {img_path}")
 
-        # Convert BGR to RGB
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Convert based on mode
+        if self.grayscale:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Expand to (H, W, 1) for consistency with transforms
+            image = np.expand_dims(image, axis=-1)
+        else:
+            # Convert BGR to RGB
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # Apply transform if provided
         if self.transform is not None:
@@ -68,7 +77,8 @@ class WoodImageDataset(Dataset):
     def from_directories(cls,
                         positive_dir: Path,
                         negative_dir: Path,
-                        transform: Optional[Callable] = None):
+                        transform: Optional[Callable] = None,
+                        grayscale: bool = False):
         """
         Create dataset from two directories
 
@@ -76,6 +86,7 @@ class WoodImageDataset(Dataset):
             positive_dir: Directory containing positive class images (label = 1)
             negative_dir: Directory containing negative class images (label = 0)
             transform: Optional transform to apply
+            grayscale: If True, load images as grayscale (1 channel)
 
         Returns:
             WoodImageDataset instance
@@ -101,14 +112,15 @@ class WoodImageDataset(Dataset):
 
         print(f"Loaded {len(positive_paths)} positive images, {len(negative_paths)} negative images")
 
-        return cls(all_paths, all_labels, transform=transform)
+        return cls(all_paths, all_labels, transform=transform, grayscale=grayscale)
 
     @classmethod
     def from_csv(cls,
                  csv_path: Path,
                  image_col: str = 'image_path',
                  label_col: str = 'label',
-                 transform: Optional[Callable] = None):
+                 transform: Optional[Callable] = None,
+                 grayscale: bool = False):
         """
         Create dataset from CSV file
 
@@ -117,6 +129,7 @@ class WoodImageDataset(Dataset):
             image_col: Column name for image paths
             label_col: Column name for labels
             transform: Optional transform to apply
+            grayscale: If True, load images as grayscale (1 channel)
 
         Returns:
             WoodImageDataset instance
@@ -133,7 +146,7 @@ class WoodImageDataset(Dataset):
 
         print(f"Loaded {len(image_paths)} images from {csv_path}")
 
-        return cls(image_paths, labels, transform=transform)
+        return cls(image_paths, labels, transform=transform, grayscale=grayscale)
 
 
 class AugmentedWoodDataset(Dataset):
@@ -149,18 +162,21 @@ class AugmentedWoodDataset(Dataset):
                  base_dataset: WoodImageDataset,
                  augmentation_transform: Callable,
                  num_augmentations: int = 1,
-                 include_original: bool = True):
+                 include_original: bool = True,
+                 grayscale: bool = False):
         """
         Args:
             base_dataset: Base WoodImageDataset (should use val transforms, not train)
             augmentation_transform: Transform to apply for augmentations
             num_augmentations: Number of augmented versions per original image
             include_original: Whether to include original (non-augmented) images
+            grayscale: If True, load images as grayscale (1 channel)
         """
         self.base_dataset = base_dataset
         self.augmentation_transform = augmentation_transform
         self.num_augmentations = num_augmentations
         self.include_original = include_original
+        self.grayscale = grayscale
 
         # Calculate multiplier: original + augmented versions
         self.multiplier = (1 if include_original else 0) + num_augmentations
@@ -179,7 +195,7 @@ class AugmentedWoodDataset(Dataset):
         original_idx = idx // self.multiplier
         augmentation_idx = idx % self.multiplier
 
-        # Get the original image (raw RGB numpy array)
+        # Get the original image (raw numpy array)
         img_path = self.base_dataset.image_paths[original_idx]
         label = self.base_dataset.labels[original_idx]
 
@@ -187,7 +203,14 @@ class AugmentedWoodDataset(Dataset):
         image = cv2.imread(str(img_path))
         if image is None:
             raise ValueError(f"Failed to load image: {img_path}")
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # Convert based on mode
+        if self.grayscale:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Expand to (H, W, 1) for consistency with transforms
+            image = np.expand_dims(image, axis=-1)
+        else:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # If we want the original and this is the first index
         if self.include_original and augmentation_idx == 0:
