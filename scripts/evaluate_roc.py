@@ -43,7 +43,7 @@ def main():
                         help='Device to use (cuda or cpu)')
     parser.add_argument('--image_size', type=int, default=224,
                         help='Input image size')
-    parser.add_argument('--class_names', type=str, nargs=2, default=['Non-Wood', 'Wood'],
+    parser.add_argument('--class_names', type=str, nargs=2, default=['Unusable', 'Usable'],
                         help='Class names [negative positive]')
     parser.add_argument('--plot_thresholds', action='store_true',
                         help='Annotate threshold values on plot')

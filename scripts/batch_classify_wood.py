@@ -21,7 +21,7 @@ import shutil
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.features import WoodFeatureExtractor
-from src.models import WoodRandomForest, ResNet18
+from src.models import WoodRandomForest, ResNet18, EfficientNetClassifier
 from src.data.transforms import get_test_transforms
 
 
@@ -30,7 +30,7 @@ def load_model(model_type, model_path, device='cpu', use_texture=False, vol_thre
     if model_type == 'rf':
         model = WoodRandomForest.load(Path(model_path))
         feature_extractor = WoodFeatureExtractor(
-            vol_threshold=vol_threshold,
+            skip_vol_check=True,
             use_texture=use_texture
         )
         return model, feature_extractor, None
@@ -56,22 +56,35 @@ def load_model(model_type, model_path, device='cpu', use_texture=False, vol_thre
         checkpoint = torch.load(model_path, map_location=device)
         state_dict = checkpoint['model_state_dict']
 
-        # Auto-detect num_classes from checkpoint
+        # Auto-detect num_classes and in_channels from checkpoint
         num_classes = None
-        if 'fc.weight' in state_dict:
+        in_channels = 3  # Default to RGB
+
+        # EfficientNet: check classifier.1.weight
+        if 'model.classifier.1.weight' in state_dict:
+            num_classes = state_dict['model.classifier.1.weight'].shape[0]
+            in_channels = state_dict['model.features.0.0.weight'].shape[1]
+        # ResNet: check fc.weight
+        elif 'fc.weight' in state_dict:
             num_classes = state_dict['fc.weight'].shape[0]
+            if 'conv1.weight' in state_dict:
+                in_channels = state_dict['conv1.weight'].shape[1]
 
         if num_classes is None:
             print("  Warning: Could not detect num_classes, using default=1")
             num_classes = 1
 
         print(f"  Detected num_classes: {num_classes}")
+        print(f"  Detected in_channels: {in_channels} ({'grayscale' if in_channels == 1 else 'RGB'})")
 
-        model = ResNet18(num_classes=num_classes)
+        model = EfficientNetClassifier(num_classes=num_classes, in_channels=in_channels)
         model.load_state_dict(state_dict)
         model = model.to(device)
         model.eval()
-        return model, None, get_test_transforms()
+
+        # Get transforms with correct number of channels
+        transform = get_test_transforms(grayscale=(in_channels == 1))
+        return model, None, transform
 
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -82,7 +95,11 @@ def predict_with_features(image_path, model, feature_extractor, model_type):
     try:
         features = feature_extractor.extract(image_path)
 
-        if features['is_clear'] == 0:
+        # For RF model with skip_vol_check, don't filter by is_clear
+        # Let the model decide based on all features including vol_score
+        skip_blur_check = (model_type == 'rf' and feature_extractor.skip_vol_check)
+
+        if features['is_clear'] == 0 and not skip_blur_check:
             return {
                 'prediction': 'blurry',
                 'confidence': 0.0,

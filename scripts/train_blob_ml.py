@@ -2,9 +2,12 @@
 """
 Train Random Forest or MLP on blob/texture features
 
+Uses train/validation split (no test set - final testing done during batch processing)
+
 Usage:
-    python scripts/train_blob_ml.py --model rf --wood-dir dataset/wood/ --non-wood-dir dataset/non_wood/
-    python scripts/train_blob_ml.py --model mlp --wood-dir dataset/wood/ --non-wood-dir dataset/non_wood/ --use-texture
+    python scripts/train_blob_ml.py --model rf --positive-dir dataset/wood/ --negative-dir dataset/non_wood/
+    python scripts/train_blob_ml.py --model mlp --positive-dir dataset/wood/ --negative-dir dataset/non_wood/ --use-texture
+    python scripts/train_blob_ml.py --model rf --positive-dir dataset/usable/ --negative-dir dataset/unusable/ --task usability
 """
 
 import argparse
@@ -17,6 +20,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
+from PIL import Image
+import cv2
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,8 +31,110 @@ from src.models import WoodRandomForest, create_mlp_model
 from src.utils.metrics import compute_metrics, print_metrics, print_confusion_matrix
 
 
-def extract_features_from_images(image_paths, feature_extractor):
-    """Extract features from list of image paths"""
+def save_blob_visualizations(image_paths, output_dir, class_name, max_images=10,
+                            min_blob_area=3, max_blob_area=40, threshold_value=40):
+    """
+    Save thresholded and blob overlay visualizations
+
+    Args:
+        image_paths: List of image paths to visualize
+        output_dir: Directory to save visualizations
+        class_name: Name of the class (for subfolder)
+        max_images: Maximum number of images to save
+        min_blob_area: Minimum blob area for filtering
+        max_blob_area: Maximum blob area for filtering
+        threshold_value: Binary threshold value for blob detection
+    """
+    from src.features.blob import preprocess_image, connected_components_labeling
+
+    vis_dir = output_dir / 'visualizations' / class_name
+    vis_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\nSaving {min(len(image_paths), max_images)} visualizations for {class_name}...")
+
+    for idx, img_path in enumerate(image_paths[:max_images]):
+        try:
+            # Load original image and resize to 320x320
+            original = cv2.imread(str(img_path))
+            if original is None:
+                continue
+
+            # Resize original to match processed size
+            original_resized = cv2.resize(original, (320, 320), interpolation=cv2.INTER_LANCZOS4)
+
+            # Get thresholded binary image (resize to 320x320)
+            binary_mask = preprocess_image(img_path, threshold_value=threshold_value, resize_to=(320, 320))
+
+            # Get labeled regions
+            labels = connected_components_labeling(binary_mask)
+
+            # Extract region properties and filter by area
+            from src.features.blob import extract_region_properties
+            regions = extract_region_properties(labels)
+            filtered_regions = {
+                label: props for label, props in regions.items()
+                if min_blob_area < props['area'] < max_blob_area
+            }
+
+            # Create filtered label image (only show blobs that pass filter)
+            filtered_labels = np.zeros_like(labels)
+            for label in filtered_regions.keys():
+                filtered_labels[labels == label] = 1
+
+            # Create visualizations
+            # 1. Thresholded image (binary)
+            threshold_vis = (binary_mask * 255).astype(np.uint8)
+            threshold_path = vis_dir / f"{idx+1:02d}_{img_path.stem}_threshold.png"
+            cv2.imwrite(str(threshold_path), threshold_vis)
+
+            # 2. Blob overlay (colored regions on resized original - FILTERED)
+            # Create colored label image
+            if len(filtered_regions) > 0:
+                # Normalize filtered labels to 0-255 range for visualization
+                labels_norm = (filtered_labels * 255).astype(np.uint8)
+
+                # Create color overlay (green for detected regions)
+                overlay = original_resized.copy()
+                green_mask = np.zeros_like(original_resized)
+                green_mask[:, :, 1] = labels_norm  # Green channel
+
+                # Blend original with green overlay
+                overlay = cv2.addWeighted(overlay, 0.7, green_mask, 0.3, 0)
+
+                # Draw contours for better visibility
+                contours, _ = cv2.findContours(labels_norm, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(overlay, contours, -1, (0, 255, 0), 1)
+
+                overlay_path = vis_dir / f"{idx+1:02d}_{img_path.stem}_overlay.png"
+                cv2.imwrite(str(overlay_path), overlay)
+
+                # Add text showing filter settings
+                cv2.putText(overlay, f"Blobs: {len(filtered_regions)} ({int(min_blob_area)}-{int(max_blob_area)}px)", (5, 15),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                cv2.imwrite(str(overlay_path), overlay)
+            else:
+                # No blobs pass the filter, save resized original with text
+                overlay = original_resized.copy()
+                cv2.putText(overlay, f"No blobs in range ({int(min_blob_area)}-{int(max_blob_area)}px)", (10, 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                overlay_path = vis_dir / f"{idx+1:02d}_{img_path.stem}_overlay.png"
+                cv2.imwrite(str(overlay_path), overlay)
+
+        except Exception as e:
+            print(f"  Error visualizing {img_path.name}: {e}")
+            continue
+
+    print(f"  Saved to: {vis_dir}/")
+
+
+def extract_features_from_images(image_paths, feature_extractor, skip_vol_check=False):
+    """Extract features from list of image paths
+
+    Args:
+        image_paths: List of paths to images
+        feature_extractor: WoodFeatureExtractor instance
+        skip_vol_check: If True, include all images regardless of clarity (for usability task)
+    """
     features_list = []
     valid_indices = []
 
@@ -35,8 +142,8 @@ def extract_features_from_images(image_paths, feature_extractor):
     for idx, img_path in enumerate(tqdm(image_paths)):
         try:
             features = feature_extractor.extract(img_path)
-            # Only include if image is clear
-            if features['is_clear'] > 0:
+            # Include image if: skip_vol_check is True OR image is clear
+            if skip_vol_check or features['is_clear'] > 0:
                 features_list.append(features)
                 valid_indices.append(idx)
         except Exception as e:
@@ -68,10 +175,16 @@ def main():
                        help='Extract texture features (LBP, Gabor, GLCM, FFT)')
     parser.add_argument('--vol-threshold', type=float, default=900,
                        help='VoL threshold for blur detection (default: 900)')
+    parser.add_argument('--threshold-value', type=int, default=40,
+                       help='Binary threshold value for blob detection (default: 40)')
+    parser.add_argument('--min-blob-area', type=float, default=3,
+                       help='Minimum blob area in pixels (default: 3)')
+    parser.add_argument('--max-blob-area', type=float, default=40,
+                       help='Maximum blob area in pixels (default: 40)')
 
     # Training arguments
-    parser.add_argument('--test-size', type=float, default=0.2,
-                       help='Test set fraction (default: 0.2)')
+    parser.add_argument('--val-size', type=float, default=0.2,
+                       help='Validation set fraction (default: 0.2)')
     parser.add_argument('--random-seed', type=int, default=42,
                        help='Random seed (default: 42)')
 
@@ -133,17 +246,31 @@ def main():
     print(f"  {args.class_names[1]} (positive): {len(positive_images)}")
     print(f"  {args.class_names[0]} (negative): {len(negative_images)}")
 
+    # Save visualizations before training
+    save_blob_visualizations(positive_images, output_dir, args.class_names[1], max_images=10,
+                            min_blob_area=args.min_blob_area, max_blob_area=args.max_blob_area,
+                            threshold_value=args.threshold_value)
+    save_blob_visualizations(negative_images, output_dir, args.class_names[0], max_images=10,
+                            min_blob_area=args.min_blob_area, max_blob_area=args.max_blob_area,
+                            threshold_value=args.threshold_value)
+
     all_images = positive_images + negative_images
     all_labels = [1] * len(positive_images) + [0] * len(negative_images)
 
     # Create feature extractor
     feature_extractor = WoodFeatureExtractor(
         vol_threshold=args.vol_threshold,
-        use_texture=args.use_texture
+        threshold_value=args.threshold_value,
+        use_texture=args.use_texture,
+        skip_vol_check=args.skip_vol_check,
+        min_blob_area=args.min_blob_area,
+        max_blob_area=args.max_blob_area
     )
 
     # Extract features
-    features_list, valid_indices = extract_features_from_images(all_images, feature_extractor)
+    features_list, valid_indices = extract_features_from_images(
+        all_images, feature_extractor, skip_vol_check=args.skip_vol_check
+    )
     valid_labels = [all_labels[i] for i in valid_indices]
 
     print(f"\nValid images after filtering: {len(features_list)}")
@@ -157,14 +284,14 @@ def main():
 
     print(f"Feature matrix shape: {X.shape}")
 
-    # Train/test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=args.test_size, random_state=args.random_seed, stratify=y
+    # Train/validation split
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=args.val_size, random_state=args.random_seed, stratify=y
     )
 
     print(f"\nSplit:")
     print(f"  Train: {len(X_train)} samples")
-    print(f"  Test: {len(X_test)} samples")
+    print(f"  Validation: {len(X_val)} samples")
 
     # Train model
     if args.model == 'rf':
@@ -180,8 +307,8 @@ def main():
         # Evaluate
         train_preds = model.predict(X_train)
         train_probs = model.predict_proba(X_train)[:, 1]
-        test_preds = model.predict(X_test)
-        test_probs = model.predict_proba(X_test)[:, 1]
+        val_preds = model.predict(X_val)
+        val_probs = model.predict_proba(X_val)[:, 1]
 
         # Save model
         model.save(output_dir)
@@ -201,7 +328,7 @@ def main():
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
+        X_val_scaled = scaler.transform(X_val)
 
         # Create model
         device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -242,10 +369,10 @@ def main():
         model.eval()
         with torch.no_grad():
             train_probs = model(torch.FloatTensor(X_train_scaled).to(device)).cpu().numpy().flatten()
-            test_probs = model(torch.FloatTensor(X_test_scaled).to(device)).cpu().numpy().flatten()
+            val_probs = model(torch.FloatTensor(X_val_scaled).to(device)).cpu().numpy().flatten()
 
         train_preds = (train_probs > 0.5).astype(int)
-        test_preds = (test_probs > 0.5).astype(int)
+        val_preds = (val_probs > 0.5).astype(int)
 
         # Save model and scaler
         torch.save({
@@ -262,22 +389,22 @@ def main():
     print("=" * 80)
 
     train_metrics = compute_metrics(y_train, train_preds, train_probs)
-    test_metrics = compute_metrics(y_test, test_preds, test_probs)
+    val_metrics = compute_metrics(y_val, val_preds, val_probs)
 
     print_metrics(train_metrics, "Train")
     print()
-    print_metrics(test_metrics, "Test")
+    print_metrics(val_metrics, "Validation")
 
-    print_confusion_matrix(y_test, test_preds)
+    print_confusion_matrix(y_val, val_preds)
 
     # Save metrics to CSV
     metrics_df = pd.DataFrame({
-        'split': ['train', 'test'],
-        'accuracy': [train_metrics['accuracy'], test_metrics['accuracy']],
-        'precision': [train_metrics['precision'], test_metrics['precision']],
-        'recall': [train_metrics['recall'], test_metrics['recall']],
-        'f1': [train_metrics['f1'], test_metrics['f1']],
-        'auc': [train_metrics.get('auc', 0), test_metrics.get('auc', 0)]
+        'split': ['train', 'validation'],
+        'accuracy': [train_metrics['accuracy'], val_metrics['accuracy']],
+        'precision': [train_metrics['precision'], val_metrics['precision']],
+        'recall': [train_metrics['recall'], val_metrics['recall']],
+        'f1': [train_metrics['f1'], val_metrics['f1']],
+        'auc': [train_metrics.get('auc', 0), val_metrics.get('auc', 0)]
     })
     metrics_csv_path = output_dir / 'training_metrics.csv'
     metrics_df.to_csv(metrics_csv_path, index=False)

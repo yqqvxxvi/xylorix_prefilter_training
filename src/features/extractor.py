@@ -30,24 +30,30 @@ class WoodFeatureExtractor:
     def __init__(self,
                  vol_threshold: float = 900,
                  threshold_value: int = 40,
-                 min_blob_area: float = 10,
-                 max_blob_area: float = 125,
+                 min_blob_area: float = 3,
+                 max_blob_area: float = 40,
                  use_texture: bool = False,
-                 texture_params: Optional[Dict] = None):
+                 texture_params: Optional[Dict] = None,
+                 skip_vol_check: bool = False,
+                 resize_to: tuple = (320, 320)):
         """
         Args:
             vol_threshold: VoL threshold for blur detection (default 900)
             threshold_value: Binary threshold for blob detection (default 40)
-            min_blob_area: Minimum blob area in pixels (default 10)
-            max_blob_area: Maximum blob area in pixels (default 125)
+            min_blob_area: Minimum blob area in pixels (default 3)
+            max_blob_area: Maximum blob area in pixels (default 40)
             use_texture: Whether to extract texture features
             texture_params: Optional texture feature parameters
+            skip_vol_check: If True, extract features even for blurry images (for usability task)
+            resize_to: Resize images to (width, height) before blob detection (default 320x320)
         """
         self.vol_threshold = vol_threshold
         self.threshold_value = threshold_value
         self.min_blob_area = min_blob_area
         self.max_blob_area = max_blob_area
         self.use_texture = use_texture
+        self.skip_vol_check = skip_vol_check
+        self.resize_to = resize_to
 
         # Initialize texture extractor if needed
         if self.use_texture:
@@ -87,18 +93,20 @@ class WoodFeatureExtractor:
         features['is_clear'] = float(vol_score >= self.vol_threshold)
 
         # If image is blurry, return early
-        if not features['is_clear']:
+        # Skip feature extraction for blurry images (unless skip_vol_check is True)
+        if not features['is_clear'] and not self.skip_vol_check:
             # Pad with zeros for blob features
             for feat_name in BLOB_FEATURE_NAMES:
                 features[feat_name] = 0.0
             return features
 
-        # 2. Blob analysis
+        # 2. Blob analysis (extract even if blurry when skip_vol_check=True)
         blob_features = extract_blob_features(
             str(image_path),
             threshold_value=self.threshold_value,
             min_blob_area=self.min_blob_area,
-            max_blob_area=self.max_blob_area
+            max_blob_area=self.max_blob_area,
+            resize_to=self.resize_to
         )
         features.update(blob_features)
 
