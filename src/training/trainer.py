@@ -13,6 +13,12 @@ from typing import Optional, Dict
 from ..utils.metrics import compute_metrics
 import pandas as pd
 
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 
 class CNNTrainer:
     """Trainer for CNN models"""
@@ -25,7 +31,9 @@ class CNNTrainer:
                  optimizer: torch.optim.Optimizer,
                  device: str,
                  scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
-                 save_dir: Path = Path('models')):
+                 save_dir: Path = Path('models'),
+                 use_wandb: bool = False,
+                 wandb_config: Optional[Dict] = None):
         """
         Args:
             model: PyTorch model
@@ -36,6 +44,8 @@ class CNNTrainer:
             device: Device (cuda/mps/cpu)
             scheduler: Optional learning rate scheduler
             save_dir: Directory to save checkpoints
+            use_wandb: Whether to log to Weights & Biases
+            wandb_config: Configuration dict for wandb (project, name, config, etc.)
         """
         self.model = model
         self.train_loader = train_loader
@@ -49,6 +59,23 @@ class CNNTrainer:
 
         self.best_val_acc = 0.0
         self.history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+
+        # Weights & Biases setup
+        self.use_wandb = use_wandb and WANDB_AVAILABLE
+        if self.use_wandb:
+            if not WANDB_AVAILABLE:
+                print("Warning: wandb not installed. Run 'pip install wandb' to enable logging.")
+                self.use_wandb = False
+            else:
+                wandb_config = wandb_config or {}
+                wandb.init(
+                    project=wandb_config.get('project', 'wood-classification'),
+                    name=wandb_config.get('name'),
+                    config=wandb_config.get('config', {}),
+                    dir=str(self.save_dir)
+                )
+                # Watch model for gradient logging
+                wandb.watch(model, log='all', log_freq=100)
 
     def train_epoch(self, epoch: int, total_epochs: int) -> Dict[str, float]:
         """Train for one epoch"""
@@ -170,6 +197,22 @@ class CNNTrainer:
             self.history['val_loss'].append(val_metrics['loss'])
             self.history['val_acc'].append(val_metrics['accuracy'])
 
+            # Log to wandb
+            if self.use_wandb:
+                wandb.log({
+                    'epoch': epoch,
+                    'train/loss': train_metrics['loss'],
+                    'train/accuracy': train_metrics['accuracy'],
+                    'train/f1': train_metrics['f1'],
+                    'val/loss': val_metrics['loss'],
+                    'val/accuracy': val_metrics['accuracy'],
+                    'val/f1': val_metrics['f1'],
+                    'val/auc': val_metrics.get('auc', 0),
+                    'val/precision': val_metrics.get('precision', 0),
+                    'val/recall': val_metrics.get('recall', 0),
+                    'lr': self.optimizer.param_groups[0]['lr']
+                })
+
             # Learning rate scheduler
             if self.scheduler is not None:
                 if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
@@ -201,6 +244,11 @@ class CNNTrainer:
 
         # Save training history to CSV
         self.save_history_csv()
+
+        # Finish wandb run
+        if self.use_wandb:
+            wandb.log({'best_val_accuracy': self.best_val_acc})
+            wandb.finish()
 
         print(f"\nTraining complete! Best val accuracy: {self.best_val_acc:.4f}")
         print(f"Training metrics saved to: {self.save_dir / 'training_history.csv'}")

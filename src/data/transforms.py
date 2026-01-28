@@ -98,7 +98,7 @@ def get_train_transforms(image_size: int = 224, grayscale: bool = False):
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
             RandomRotationReflect(degrees=30),  # Rotation with mirrored edges
-            transforms.ColorJitter(brightness=0.3, contrast=0.3),  # No saturation for grayscale
+            transforms.ColorJitter(brightness=0.03, contrast=0.03),  # No saturation for grayscale
             transforms.Grayscale(num_output_channels=1),  # Ensure 1 channel
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5], std=[0.5])  # Single channel normalization
@@ -110,7 +110,7 @@ def get_train_transforms(image_size: int = 224, grayscale: bool = False):
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomVerticalFlip(p=0.5),
             RandomRotationReflect(degrees=30),  # Rotation with mirrored edges
-            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
+            transforms.ColorJitter(brightness=0.03, contrast=0.03, saturation=0.03),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                std=[0.229, 0.224, 0.225])

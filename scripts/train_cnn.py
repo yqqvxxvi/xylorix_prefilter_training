@@ -95,6 +95,14 @@ def main():
     parser.add_argument('--log-dir', type=str, default='logs',
                        help='Log directory (default: logs)')
 
+    # Weights & Biases
+    parser.add_argument('--wandb', action='store_true',
+                       help='Enable Weights & Biases logging')
+    parser.add_argument('--wandb-project', type=str, default='wood-classification',
+                       help='W&B project name (default: wood-classification)')
+    parser.add_argument('--wandb-name', type=str, default=None,
+                       help='W&B run name (default: auto-generated)')
+
     args = parser.parse_args()
 
     # Auto-set class names based on task
@@ -187,6 +195,32 @@ def main():
         verbose=True
     )
 
+    # Prepare wandb config
+    wandb_config = None
+    if args.wandb:
+        wandb_config = {
+            'project': args.wandb_project,
+            'name': args.wandb_name or auto_name,
+            'config': {
+                'task': args.task,
+                'model': args.model,
+                'pretrained': args.pretrained,
+                'epochs': args.epochs,
+                'batch_size': args.batch_size,
+                'learning_rate': args.lr,
+                'weight_decay': args.weight_decay,
+                'image_size': args.image_size,
+                'grayscale': args.grayscale,
+                'val_split': args.val_split,
+                'early_stopping': args.early_stopping,
+                'balanced_sampler': args.balanced_sampler,
+                'stack_augmentations': args.stack_augmentations,
+                'num_augmentations': args.num_augmentations,
+                'device': device,
+            }
+        }
+        print(f"W&B: Logging to project '{args.wandb_project}'")
+
     # Create trainer
     trainer = CNNTrainer(
         model=model,
@@ -196,7 +230,9 @@ def main():
         optimizer=optimizer,
         device=device,
         scheduler=scheduler,
-        save_dir=Path(args.output_dir)
+        save_dir=Path(args.output_dir),
+        use_wandb=args.wandb,
+        wandb_config=wandb_config
     )
 
     # Train

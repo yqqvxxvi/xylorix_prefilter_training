@@ -15,6 +15,12 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -123,6 +129,14 @@ def main():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu',
                         help='Device to use (cuda/cpu)')
 
+    # Weights & Biases
+    parser.add_argument('--wandb', action='store_true',
+                        help='Enable Weights & Biases logging')
+    parser.add_argument('--wandb_project', type=str, default='wood-classification',
+                        help='W&B project name (default: wood-classification)')
+    parser.add_argument('--wandb_name', type=str, default=None,
+                        help='W&B run name (default: auto-generated)')
+
     args = parser.parse_args()
 
     # Create output directory
@@ -211,6 +225,31 @@ def main():
         optimizer, T_max=args.epochs
     )
 
+    # Initialize wandb
+    use_wandb = args.wandb and WANDB_AVAILABLE
+    if args.wandb and not WANDB_AVAILABLE:
+        print("Warning: wandb not installed. Run 'pip install wandb' to enable logging.")
+    if use_wandb:
+        run_name = args.wandb_name or f"simclr_{args.encoder}_bs{args.batch_size}"
+        wandb.init(
+            project=args.wandb_project,
+            name=run_name,
+            config={
+                'encoder': args.encoder,
+                'projection_dim': args.projection_dim,
+                'epochs': args.epochs,
+                'batch_size': args.batch_size,
+                'learning_rate': args.lr,
+                'temperature': args.temperature,
+                'augmentation_strength': args.augmentation_strength,
+                'grayscale': args.grayscale,
+                'device': args.device,
+            },
+            dir=str(output_dir)
+        )
+        wandb.watch(model, log='all', log_freq=100)
+        print(f"W&B: Logging to project '{args.wandb_project}'")
+
     # Training loop
     print("\n" + "=" * 60)
     print("Starting training...")
@@ -229,6 +268,14 @@ def main():
         current_lr = optimizer.param_groups[0]['lr']
 
         print(f"Epoch {epoch}/{args.epochs} - Loss: {avg_loss:.4f}, LR: {current_lr:.6f}")
+
+        # Log to wandb
+        if use_wandb:
+            wandb.log({
+                'epoch': epoch,
+                'train/loss': avg_loss,
+                'lr': current_lr
+            })
 
         # Save checkpoint
         if epoch % args.save_freq == 0 or avg_loss < best_loss:
@@ -275,6 +322,11 @@ def main():
     plot_path = output_dir / 'training_curve.png'
     plt.savefig(plot_path, dpi=150)
     print(f"Training curve saved to {plot_path}")
+
+    # Finish wandb
+    if use_wandb:
+        wandb.log({'best_loss': best_loss})
+        wandb.finish()
 
     print("\n" + "=" * 60)
     print("Training complete!")

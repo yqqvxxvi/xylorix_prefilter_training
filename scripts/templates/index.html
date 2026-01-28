@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Results Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .stats-bar {
+            background: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            min-width: 150px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filters {
+            background: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        .filter-group select {
+            padding: 0.5rem 1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group select:hover {
+            border-color: #667eea;
+        }
+
+        .filter-group button {
+            padding: 0.5rem 1.5rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .filter-group button:hover {
+            background: #5568d3;
+        }
+
+        .final-filter-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+        }
+
+        .final-filter-toggle input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .results-info {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            color: #666;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .image-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%;
+            background: #f9f9f9;
+            overflow: hidden;
+        }
+
+        .image-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-info {
+            padding: 1.5rem;
+        }
+
+        .image-filename {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .classification-results {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .classification-item {
+            padding: 0.75rem;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+
+        .classification-header {
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+
+        .classification-value {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .classification-label {
+            font-size: 0.9rem;
+        }
+
+        .classification-confidence {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* Color coding for predictions */
+        .wood { background: #e8f5e9; color: #2e7d32; }
+        .non_wood { background: #ffebee; color: #c62828; }
+        .usable { background: #e8f5e9; color: #2e7d32; }
+        .unusable { background: #ffebee; color: #c62828; }
+        .clear { background: #e3f2fd; color: #1565c0; }
+        .borderline { background: #fff3e0; color: #ef6c00; }
+        .very_blurry { background: #ffe0b2; color: #e65100; }
+        .blurry { background: #ffcdd2; color: #c62828; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .sobel-score {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #999;
+        }
+
+        .no-results h2 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .image-grid {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                gap: 1.5rem;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .stats-bar {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Pipeline Results Viewer</h1>
+        <p>End Grain Classification → Sobel Spectrum → Usability Assessment</p>
+    </div>
+
+    {% if summary %}
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-value">{{ summary.statistics.stage1_wood_classification.wood }}</div>
+            <div class="stat-label">End Grain Images</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ summary.statistics.stage2_sobel_spectrum.clear }}</div>
+            <div class="stat-label">Clear Images</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ summary.statistics.stage3_usability.usable }}</div>
+            <div class="stat-label">Usable Images</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ total_count }}</div>
+            <div class="stat-label">Total Processed</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="filters">
+        <form method="get" action="/" class="filter-group">
+            <label for="wood">End Grain:</label>
+            <select name="wood" id="wood">
+                <option value="all" {% if filters.wood == 'all' %}selected{% endif %}>All</option>
+                <option value="wood" {% if filters.wood == 'wood' %}selected{% endif %}>End Grain</option>
+                <option value="non_wood" {% if filters.wood == 'non_wood' %}selected{% endif %}>Non-End Grain</option>
+            </select>
+
+            <label for="sobel">Sobel:</label>
+            <select name="sobel" id="sobel">
+                <option value="all" {% if filters.sobel == 'all' %}selected{% endif %}>All</option>
+                <option value="clear" {% if filters.sobel == 'clear' %}selected{% endif %}>Clear</option>
+                <option value="borderline" {% if filters.sobel == 'borderline' %}selected{% endif %}>Borderline</option>
+                <option value="very_blurry" {% if filters.sobel == 'very_blurry' %}selected{% endif %}>Very Blurry</option>
+                <option value="blurry" {% if filters.sobel == 'blurry' %}selected{% endif %}>Blurry</option>
+            </select>
+
+            <label for="usability">Usability:</label>
+            <select name="usability" id="usability">
+                <option value="all" {% if filters.usability == 'all' %}selected{% endif %}>All</option>
+                <option value="usable" {% if filters.usability == 'usable' %}selected{% endif %}>Usable</option>
+                <option value="unusable" {% if filters.usability == 'unusable' %}selected{% endif %}>Unusable</option>
+            </select>
+
+            <button type="submit">Apply Filters</button>
+
+            <div class="final-filter-toggle">
+                <input type="checkbox" id="final" name="final" value="true"
+                       {% if filters.final == 'true' %}checked{% endif %}
+                       onchange="this.form.submit()">
+                <label for="final">Show Only Final (End Grain + Usable)</label>
+            </div>
+        </form>
+    </div>
+
+    <div class="container">
+        <div class="results-info">
+            Showing <strong>{{ filtered_count }}</strong> of <strong>{{ total_count }}</strong> images
+        </div>
+
+        {% if results %}
+        <div class="image-grid">
+            {% for result in results %}
+            <div class="image-card">
+                <div class="image-container">
+                    <img src="/image/{{ result.filename }}" alt="{{ result.filename }}" loading="lazy">
+                </div>
+                <div class="image-info">
+                    <div class="image-filename">{{ result.filename }}</div>
+
+                    <div class="classification-results">
+                        <!-- End Grain Classification -->
+                        <div class="classification-item">
+                            <div class="classification-header">Stage 1: End Grain Classification</div>
+                            <div class="classification-value">
+                                <span class="badge {{ result.wood_classification.prediction }}">
+                                    {% if result.wood_classification.prediction == 'wood' %}
+                                        END GRAIN
+                                    {% elif result.wood_classification.prediction == 'non_wood' %}
+                                        NON-END GRAIN
+                                    {% else %}
+                                        {{ result.wood_classification.prediction|upper }}
+                                    {% endif %}
+                                </span>
+                                <span class="classification-confidence">
+                                    {% if result.wood_classification.prediction == 'wood' %}
+                                        {{ "%.1f"|format((1 - result.wood_classification.confidence) * 100) }}%
+                                    {% else %}
+                                        {{ "%.1f"|format(result.wood_classification.confidence * 100) }}%
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Sobel Spectrum -->
+                        <div class="classification-item">
+                            <div class="classification-header">Stage 2: Sobel Spectrum</div>
+                            <div class="classification-value">
+                                <span class="badge {{ result.sobel_spectrum.category }}">
+                                    {{ result.sobel_spectrum.category|upper }}
+                                </span>
+                            </div>
+                            <div class="sobel-score">
+                                Score: {{ "%.0f"|format(result.sobel_spectrum.sobel_score) }}
+                            </div>
+                        </div>
+
+                        <!-- Usability Classification -->
+                        <div class="classification-item">
+                            <div class="classification-header">Stage 3: Usability</div>
+                            <div class="classification-value">
+                                <span class="badge {{ result.usability_classification.prediction }}">
+                                    {{ result.usability_classification.prediction|upper }}
+                                </span>
+                                <span class="classification-confidence">
+                                    {{ "%.1f"|format(result.usability_classification.confidence * 100) }}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="no-results">
+            <h2>No results found</h2>
+            <p>Try adjusting your filters</p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
