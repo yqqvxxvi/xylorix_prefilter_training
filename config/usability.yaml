@@ -1,37 +1,6 @@
-# Configuration for usability dataset experiments
+# Configuration for usability classification CNN training
 
-# Experiment settings
-experiment:
-  name: 'usability'
-  description: 'Usability dataset training with hyperparameter tuning'
-
-# Feature extraction (same as default)
-features:
-  vol_threshold: 900
-  threshold_value: 40
-  min_blob_area: 10
-  max_blob_area: 125
-  use_texture: false
-
-# Random Forest (optimized for usability)
-random_forest:
-  n_estimators: 150
-  max_depth: 20
-  min_samples_split: 2
-  min_samples_leaf: 1
-  max_features: 'sqrt'
-  random_state: 42
-
-# MLP (optimized for usability)
-mlp:
-  hidden_dim1: 128
-  hidden_dim2: 64
-  dropout: 0.3
-  epochs: 150
-  batch_size: 32
-  learning_rate: 0.0005
-
-# CNN (optimized for usability)
+# CNN Training (optimized for usability task)
 cnn:
   model: 'resnet18'
   pretrained: true
@@ -42,17 +11,17 @@ cnn:
   weight_decay: 0.0001
   val_split: 0.2
   early_stopping_patience: 10
-  use_balanced_sampler: true  # Important for usability dataset
+  use_balanced_sampler: true  # Important for imbalanced usability dataset
   num_workers: 4
+  grayscale: false
 
 # Training
 training:
   random_seed: 42
-  test_size: 0.2
 
-# Paths (customize for your usability dataset)
+# Paths
 paths:
-  positive_dir: 'dataset/usability/wood'
-  negative_dir: 'dataset/usability/non_wood'
+  positive_dir: 'dataset/usability/usable'
+  negative_dir: 'dataset/usability/unusable'
   output_dir: 'models/usability'
   log_dir: 'logs/usability'
