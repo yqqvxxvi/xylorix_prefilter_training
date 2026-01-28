@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-01-28T19:28:45.021504",
+  "threshold": 0.5,
+  "endgrain": {
+    "metrics": {
+      "accuracy": 0.9644334160463193,
+      "precision": 0.9986842105263158,
+      "recall": 0.947565543071161,
+      "f1_score": 0.9724535554131967,
+      "auc": 0.9988861961763482,
+      "true_negatives": 407,
+      "false_positives": 1,
+      "false_negatives": 42,
+      "true_positives": 759,
+      "false_negative_rate": 0.052434456928838954,
+      "false_positive_rate": 0.0024509803921568627,
+      "total_samples": 1209,
+      "positive_samples": 801,
+      "negative_samples": 408
+    },
+    "input_shape": [
+      1,
+      224,
+      224,
+      1
+    ],
+    "threshold": 0.5
+  },
+  "usability": {
+    "metrics": {
+      "accuracy": 0.9587628865979382,
+      "precision": 0.9375,
+      "recall": 1.0,
+      "f1_score": 0.967741935483871,
+      "auc": 0.997972972972973,
+      "true_negatives": 66,
+      "false_positives": 8,
+      "false_negatives": 0,
+      "true_positives": 120,
+      "false_negative_rate": 0.0,
+      "false_positive_rate": 0.10810810810810811,
+      "total_samples": 194,
+      "positive_samples": 120,
+      "negative_samples": 74
+    },
+    "input_shape": [
+      1,
+      224,
+      224,
+      3
+    ],
+    "threshold": 0.5
+  }
+}

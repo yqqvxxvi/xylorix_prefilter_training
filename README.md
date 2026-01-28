@@ -10,6 +10,71 @@ CNN-based image classification for wood detection and usability assessment. Supp
 - **Batch Inference**: Classify directories of images with adjustable thresholds
 - **ROC Curve Generation**: Evaluate models and find optimal thresholds
 
+## Model Performance
+
+Production TFLite models evaluated on independent test sets (January 2026):
+
+### Endgrain Detection Model
+**Test Set:** 1,209 images (801 positive, 408 negative)
+
+| Metric | Value |
+|--------|-------|
+| **Accuracy** | **96.44%** |
+| **Precision** | 99.87% |
+| **Recall** | 94.76% |
+| **F1 Score** | 97.25% |
+| **AUC** | 99.89% |
+| **False Negative Rate** | 5.24% |
+
+**Model Details:**
+- Input: 224×224 grayscale (1 channel)
+- Size: 15 MB (float32)
+- Location: `models/inuse_27012026_before/endgrain.tflite`
+
+**Performance Highlights:**
+- Excellent precision (99.87%) - minimal false positives
+- Strong recall (94.76%) - catches most positive cases
+- Very low false positive rate (0.25%)
+
+### Usability Classification Model
+**Test Set:** 194 images (120 positive, 74 negative)
+
+| Metric | Value |
+|--------|-------|
+| **Accuracy** | **95.88%** |
+| **Precision** | 93.75% |
+| **Recall** | 100.00% |
+| **F1 Score** | 96.77% |
+| **AUC** | 99.80% |
+| **False Negative Rate** | 0.00% |
+
+**Model Details:**
+- Input: 224×224 RGB (3 channels)
+- Size: 15 MB (float32)
+- Location: `models/inuse_27012026_before/usability.tflite`
+
+**Performance Highlights:**
+- Perfect recall (100%) - no false negatives
+- High accuracy (95.88%) on usability assessment
+- Conservative on negative predictions (10.81% FPR)
+
+### Evaluation Outputs
+
+Run comprehensive evaluation with:
+```bash
+python scripts/evaluate_tflite.py --output-dir test_result/
+```
+
+Generated outputs include:
+- Confusion matrices
+- ROC curves with optimal thresholds
+- Sample predictions visualization
+- False negative/positive analysis
+- Sharpness analysis integration
+- Detailed metrics (JSON + text reports)
+
+See full evaluation report: `test_result/summary_report.txt`
+
 ## Installation
 
 ```bash
@@ -26,6 +91,7 @@ wood-classification/
 ├── scripts/
 │   ├── train_cnn.py              # Train CNN models
 │   ├── convert_to_tflite.py      # Convert to TFLite
+│   ├── evaluate_tflite.py        # TFLite model evaluation
 │   ├── batch_classify_wood.py    # Batch wood classification
 │   ├── batch_classify_usability.py
 │   ├── evaluate_roc.py           # Generate ROC curves
@@ -35,6 +101,10 @@ wood-classification/
 │   ├── models/                   # Model architectures
 │   ├── training/                 # Training utilities
 │   └── utils/                    # Metrics and plotting
+├── models/
+│   └── inuse_27012026_before/    # Production TFLite models
+│       ├── endgrain.tflite       # 96.44% accuracy
+│       └── usability.tflite      # 95.88% accuracy
 ├── config/
 │   ├── default.yaml              # Default CNN settings
 │   └── usability.yaml            # Usability task settings
@@ -228,6 +298,64 @@ python scripts/evaluate_roc.py \
 **Output:**
 - ROC curve plot with AUC score
 - Optimal threshold (Youden's index)
+
+---
+
+### 6. TFLite Model Evaluation
+
+Comprehensive evaluation of TFLite models with test data:
+
+```bash
+# Evaluate both endgrain and usability models
+python scripts/evaluate_tflite.py --output-dir test_result/
+
+# Evaluate single model
+python scripts/evaluate_tflite.py \
+    --output-dir test_result/ \
+    --models endgrain
+
+# With custom threshold
+python scripts/evaluate_tflite.py \
+    --output-dir test_result/ \
+    --threshold 0.48
+```
+
+**Arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--output-dir` | test_result | Output directory |
+| `--models` | both | `endgrain`, `usability`, or both |
+| `--threshold` | 0.5 | Classification threshold |
+| `--include-sharpness` | True | Include sharpness analysis |
+
+**Output Structure:**
+```
+test_result/
+├── summary_report.txt              # Overall summary
+├── summary_metrics.json            # Machine-readable metrics
+├── endgrain/
+│   ├── confusion_matrix.png        # Confusion matrix
+│   ├── roc_curve.png               # ROC with AUC
+│   ├── sample_predictions.png      # Sample images
+│   ├── false_negatives.png         # Error analysis
+│   ├── predictions.csv             # All predictions
+│   └── metrics.json                # Detailed metrics
+├── usability/
+│   └── (same structure)
+└── sharpness_analysis/
+    ├── blur_detection_summary.png
+    ├── sharpness_distribution.png
+    └── sharpness_metrics.txt
+```
+
+**Features:**
+- Auto-detects input format (grayscale/RGB) from model
+- Computes accuracy, precision, recall, F1, AUC
+- Generates confusion matrices and ROC curves
+- Visualizes sample predictions and errors
+- Integrates sharpness/blur detection analysis
+- Exports detailed CSV and JSON reports
 
 ---
 

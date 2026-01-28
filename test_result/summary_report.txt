@@ -1,0 +1,63 @@
+======================================================================
+TFLITE MODEL EVALUATION REPORT
+Generated: 2026-01-28 19:29:51
+======================================================================
+
+
+======================================================================
+MODEL: ENDGRAIN
+======================================================================
+
+DATASET:
+  Total samples:    1209
+  Positive samples: 801
+  Negative samples: 408
+  Input shape:      [1, 224, 224, 1]
+  Threshold:        0.5
+
+PERFORMANCE METRICS:
+  Accuracy:         0.9644 (96.44%)
+  Precision:        0.9987
+  Recall:           0.9476
+  F1 Score:         0.9725
+  AUC:              0.9989
+
+CONFUSION MATRIX:
+  True Negatives:   407
+  False Positives:  1
+  False Negatives:  42
+  True Positives:   759
+
+ERROR RATES:
+  False Negative Rate: 0.0524 (5.24%)
+  False Positive Rate: 0.0025 (0.25%)
+
+
+======================================================================
+MODEL: USABILITY
+======================================================================
+
+DATASET:
+  Total samples:    194
+  Positive samples: 120
+  Negative samples: 74
+  Input shape:      [1, 224, 224, 3]
+  Threshold:        0.5
+
+PERFORMANCE METRICS:
+  Accuracy:         0.9588 (95.88%)
+  Precision:        0.9375
+  Recall:           1.0000
+  F1 Score:         0.9677
+  AUC:              0.9980
+
+CONFUSION MATRIX:
+  True Negatives:   66
+  False Positives:  8
+  False Negatives:  0
+  True Positives:   120
+
+ERROR RATES:
+  False Negative Rate: 0.0000 (0.00%)
+  False Positive Rate: 0.1081 (10.81%)
+
