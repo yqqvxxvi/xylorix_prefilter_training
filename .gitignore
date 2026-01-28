@@ -50,7 +50,9 @@ models/
 logs/
 outputs/
 checkpoints/
-*.png
+results/.png
+outputs/.png
+
 *.jpg
 *.jpeg
 !README_images/*.png
